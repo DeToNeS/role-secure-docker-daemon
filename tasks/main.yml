@@ -1,49 +1,39 @@
 ---
-# main.yml
+- name: "Install dependencies"
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: true
+  loop:
+    - apt-transport-https
+    - ca-certificates
+    - curl
+    - gnupg
+    - software-properties-common
 
-- name: Create a tempdir
-  file:
-    state: directory
-    path: "{{ dds_temp_path }}"   
+- name: Install key docker
+  apt_key:
+    url: https://download.docker.com/linux/debian/gpg
+    state: present
 
-- name: Remove passphrase file, if it exists
-  file:
-    state: absent
-    path: "{{ dds_passphrase_file }}" 
+- name: Install repository docker
+  apt_repository:
+    repo: deb https://download.docker.com/linux/debian bookworm stable 
 
-- name: Create passphrase file
-  file:
-    state: touch
-    path: "{{ dds_passphrase_file }}" 
+- name: Install docker
+  apt:
+    name: "{{item}}"
+    state: latest
+    update_cache: yes
+  loop:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+    - docker-buildx-plugin
+    - docker-compose-plugin
 
-- name: Add passphrase to the file
-  lineinfile:
-    dest: "{{ dds_passphrase_file }}"
-    line: "{{ dds_passphrase }}" 
-
-- name: Generate ca-key.pem
-  command: "openssl genrsa -aes256 -passout file:{{ dds_passphrase_file }} -out {{ dds_temp_path }}/ca-key.pem 4096"
-
-- name: Generate ca certificate   
-  command: "openssl req -new -x509 -days 365 -key {{ dds_temp_path }}/ca-key.pem -sha256 -out {{ dds_temp_path }}/ca.pem -passin file:{{ dds_passphrase_file }} -subj '/C={{ dds_country }}/ST={{dds_state }}>/L={{ dds_locality }}/O={{ dds_organization }}/CN={{ dds_common_name }}'"
-
-- include: generate_server_certs.yml
-- include: generate_client_certs.yml
-
-- name: Remove the temp directory
-  file:
-    state: absent
-    path: "{{ dds_temp_path }}"
-
-- name: Install shell script for setting DOCKER env vars
-  template:
-    src: "{{ role_path }}/templates/docker_env.j2"
-    dest: "{{ dds_env_shell_path }}/docker_env.sh"
-    mode: 0755
-  when: dds_install_shell
-
-- name: Restart the docker daemon 
+- name: Check docker status
   service:
     name: docker
-    state: restarted  
-  when: dds_restart_docker
+    state: started
+    enabled: yes
